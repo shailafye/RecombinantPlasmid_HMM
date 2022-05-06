@@ -39,14 +39,19 @@ class InsertDetectHMM:
         # then return top intervals
 
         # if invalid = length 0 then all good, if not, remove
-        invalid_interval, valid_interval = self.check_restriction_site_valid(self.sequence, self.detected_intervals)
+        invalid_interval, valid_interval = self.check_restriction_site_valid()
         if len(invalid_interval) != 0:
             print("REMOVE", invalid_interval)
-            # if case, edit self.detected_intervals
+            for i in invalid_interval:
+                if i[0] in self.detected_intervals:
+                    self.detected_intervals.remove(i[0])
+                if i[1] in self.detected_intervals:
+                    self.detected_intervals.remove(i[1])
 
         # code to return top 3 intervals with scoring (higher the better)
         return self.best_intervals(self.detected_intervals)
 
+    # three helper functions below to get best intervals and restriction sites
     def best_intervals(self, insert_intervals):
         # insert_intervals = [[0, 569], [1605, 1964], [7216, 7389]]
         # tests combinations of 2 and 3 fragments to get best combo of intervals
@@ -61,7 +66,6 @@ class InsertDetectHMM:
         interval_lengths = interval_lengths[1:]
 
         naming_intervals = [item for sublist in insert_intervals for item in sublist]
-
         # all intervals and scores = self.inter_dict_score
 
         if len(insert_intervals) > 1:
@@ -111,3 +115,35 @@ class InsertDetectHMM:
             if len(res) > 0:
                 sites_found[site] = res
         return sites_found
+
+    def check_restriction_site_valid(self):
+        # if two intervals share no restriction sites --> return to look like: [0, 569], [1605, 1964]
+        invalid_interval = []
+        valid_interval = []
+        test_seq_double = self.sequence + self.sequence
+        # returns list of invalid intervals --> if list is empty then use orignal detected_intervals list
+
+        for i in range(len(self.detected_intervals)):
+            interval = self.detected_intervals[i]
+            int_1 = [interval[0] - 20, interval[0] + 50]
+            # if interval is negative because  circular ex)[-20,50]
+            if int_1[0] < 0:
+                int_1 = [len(self.sequence) - abs(int_1[0]), len(self.sequence) + abs(int_1[1])]
+
+            # find all possible restriction sites for the first interval
+            sites_1 = self.find_rest_sites(test_seq_double[int_1[0]:int_1[1]], int_1[0])
+
+            for j in range(len(self.detected_intervals)):
+                interval_end = self.detected_intervals[j]
+                int_2 = [interval_end[1] - 20, interval_end[1] + 50]
+                # print("int2",int_2)
+                # print(interval, interval_end)
+                sites_2 = self.find_rest_sites(test_seq_double[int_2[0]:int_2[1]], int_2[0])
+                common_sites = list(set(sites_1.keys()) & set(sites_2.keys()))
+                if len(common_sites) < 1:
+                    # print("NO RESTRICTION SITE COMMON")
+                    invalid_interval.append([interval, interval_end])
+                else:
+                    valid_interval.append([interval, interval_end])
+
+        return invalid_interval, valid_interval
