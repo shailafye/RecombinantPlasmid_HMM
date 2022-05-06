@@ -12,7 +12,7 @@ import csv
 import numpy as np
 
 
-class InsertDetectHMM:
+class DetectInsertHMM:
 
     def __init__(self, sequence):
         self.sequence = sequence.upper()
@@ -76,10 +76,8 @@ class InsertDetectHMM:
                        "g": gc_plasmid / 2},
         }
 
-
         ### HMM BELOW ###
-
-
+        detected_intervals = viterbi_algorithm(observations, states, start_p, trans_p, emit_p)
 
         #####
         self.detected_intervals = detected_intervals
@@ -89,7 +87,6 @@ class InsertDetectHMM:
     def filter_best_intervals(self):
         # first check to see if each one has at least 1 restriction site detected on either side
         # then return top intervals
-
         # if invalid = length 0 then all good, if not, remove
         invalid_interval, valid_interval = self.check_restriction_site_valid()
         if len(invalid_interval) != 0:
@@ -210,3 +207,66 @@ def gc_content(sequence):
     # assert total_len == at_sum+ gc_sum
     gc_perc = gc_sum / total_len
     return gc_perc
+
+
+# viterbi algorithm
+def viterbi_algorithm(observations, states, start_p, trans_p, emit_p):
+    #print(observations, states, start_p, trans_p, emit_p)
+    V = [{}]
+    for st in states:
+        V[0][st] = {"log_prob": np.log(start_p[st] * emit_p[st][observations[0]]),"prev": None}  # storing start probability of first position
+    for t in range(1, len(observations)):
+        V.append({})
+        for st in states:
+            log_max_tr_prob = V[t - 1][states[0]]["log_prob"] + np.log(trans_p[states[0]][st])  # maximum transition probability for site 1
+            prev_st_selected = states[0]
+            for prev_st in states[1:]:  # maximum transition probability for the rest
+                log_tr_prob = V[t - 1][prev_st]["log_prob"] + np.log(trans_p[prev_st][st])
+                if log_tr_prob > log_max_tr_prob:
+                    log_max_tr_prob = log_tr_prob
+                    prev_st_selected = prev_st
+
+            log_max_prob = log_max_tr_prob + np.log(emit_p[st][observations[t]])
+            V[t][st] = {"log_prob": log_max_prob, "prev": prev_st_selected}
+
+    opt = []
+    log_max_prob = -np.inf
+    best_st = None
+
+    for st, data in V[-1].items():  # selecting the best prediction
+        if data["log_prob"] > log_max_prob:
+            log_max_prob = data["log_prob"]
+            best_st = st
+
+    opt.append(best_st)  # best state sequence
+    previous = best_st
+
+    insert_indices = []
+
+    dict_vec_insert = {"vector": 0, "insert": 1}
+
+    total = 0
+    for t in range(len(V) - 2, -1, -1):
+        opt.append(dict_vec_insert[V[t + 1][previous]["prev"]])
+        if dict_vec_insert[V[t + 1][previous]["prev"]] == 1:
+            total += 1
+            insert_indices.append(t)
+        previous = V[t + 1][previous]["prev"]
+
+    def interval_extract(lists):
+        lists = sorted(set(lists))
+        range_start = previous_number = lists[0]
+
+        for number in lists[1:]:
+            if number == previous_number + 1:
+                previous_number = number
+            else:
+                yield [range_start, previous_number]
+                range_start = previous_number = number
+        yield [range_start, previous_number]
+    insert_result_intervals = list(interval_extract(insert_indices))
+
+    return insert_result_intervals
+
+if __name__ == '__main__':
+    DetectInsertHMM("acttttaaattagaaaatgaaaaggcagttctaggtgaggaataccaagggccttaaggtcagtgtttggtagggcagactctggactgacagacagaaatttccccctcagatgtgccagcttctttttcccttaaaaaattgagtttgtgttttccaccctcattggctgtggcattatcatttacagttatttttcatggttccagttggttgcagttgttctgtctcacctttgcatgacatttcttgggtcaaacaagaagtggaagcctttgctgagttcctgggccatctgtgtttggggcactcacagctcacatgctgcacccatttccatgctggggtctctgtgattttcttcttgatttctaggagactttaattcagtcagggcatgaacactgttatcagcctctgagctacaaatacttcccttggaaaaccccctgtcttttgtagagcttctttttggagatattttttcccccaagtgcagaaagatccacctaggtaccccctccccacccatttttttttttttttttgagacaagagtctcactctgttgcccaggctggagtgcagtggcacgatctcagctcactgctacctctgcctcctgagttcaagcaattctcctgtctcagcctcccaagtagctaggattacaggcatgcaccaccactcccatttttgtatttttagtagagacggggtttcaccatattggtcaggctggtcttgaactcgacctcaggttatctgcctgcctcggcctcccaaagtgctgggattacaggcttgagccactgcgcccagcccacctaggccctttatgtagctcaaatggagccagagactgggggcttgaggaaaccaggtcctgcctgccactcacttctaggcctgtgcccttgggcagggacccacctgaggcaagaacgggactaggagggaacccgaggatgtccccaacagtgggcttgggaaactgtgggggtgacttccacctgcttgtgggagggatactctgtaacctttcccccttaagtgtattctctgccccgttaggaaaataaccttcgaaggccaaacctggaggcattcaacagggctgtcaagagtttacagaacgcatcagcaattgagagcattcttaaagtatgtgaagctgttgagggtttgggatccctgtgttggccctgccctgcctctggggaggagagcagggcccactccctttccaagggaatctctgaccatctgctttggtctctttccacagaatctcctgccatgtctgcccctggccacggccgcacccacggtaagctgtcccccaagatgcccgtcatggcttgctcctcagctggtcatcaccattacagcctggactcacctaatgccaccttcttggtttctttatagcgacatccaatccatatcaaggacggtgactggaatgaattccggaggaaactgacgttctatctgaaaacccttgagaatgcgcaggctcaacagacgactttgagcctcgcgatcttttgagtccaacgtccagctcgttctctgggccttctcaccacagagcctcgggacatcaaaaacagcagaacttctgaaacctctgggtcatctctcacacattccaggaccagaagcatttcaccttttcctgcggcatcagatgaattgttaattatctaatttctgaaatgtgcagctcccatttggccttgtgcggttgtgttctcatttttatcccattgagactatttatttatgtatgtatgtatttatttatttattgcctggagtgtgaactgtatttattttagcagaggagccatgtcctgctgcttctgcaaaaaactcagagtggggtggggagcatgttcatttgtacctcgagttttaaactggttcctagggatgtgtgagaataaactagactctgaacaccggaaacggctcggccgcgatcgactccagcaacgcggccatgtcgatgcgctcctgaaactcggcctcgttggtcagcgaatcgccgtcataacggatggcgcccgggccgccgcgcgatatcgagccgagaacgttatcgaagttggtcatgtgtaatcccctcgtttgaactttggattaagcgtagatacacccttggacaagccagttggattcggagacaagcaaattcagccttaaaaagggcgaggcctgcggtggtggaacaccgcagggcctctaaccgctcgacgcgctgcaccaaccagcccgcgaacggctggcagccagcgtaaggcgcggctcatcgggcggcgttcgccacgatgtcctgcacttcgagccaagcctcgaacacctgctggtgtgcacgactcacccggttgttgacaccgcgcgcggccgtgcgggctcggtggggcggctgtgtcgcccttgccagcgtgagtagcgcgtacctcacctcgcccaacaggtcgcacacagccgattcgtacgccataaagccaggtgagcccaccagctccgtaagttcgggcgctgtgtggctcgtacccgcgcattcaggcggcagggggtctaacgggtctaaggcggcgtgtacggccgccacagcggctctcagcggcccggaaacgtcctcgaaacgacgcatgtgttcctcctggttggtacaggtggttgggggtgctcggctgtcgctggtgttccaccaccagggctcgacgggagagcgggggagtgtgcagttgtggggtggcccctcagcgaaatatctgacttggagctcgtgtcggaccatacaccggtgattaatcgtggtctactaccaagcgtgagccacgtcgccgacgaatttgagcagctctggctgccgtactggccgctggcaagcgacgatctgctcgaggggatctaccgccaaagccgcgcgtcggccctaggccgccggtacatcgaggcgaacccaacagcgctggcaaacctgctggtcgtggacgtagaccatccagacgcagcgctccgagcgctcagcgcccgggggtcccatccgctgcccaacgcgatcgtgggcaatcgcgccaacggccacgcacacgcagtgtgggcactcaacgcccctgttccacgcaccgaatacgcgcggcgtaagccgctcgcatacatggcggcgtgcgccgaaggccttcggcgcgccgtcgacggcgaccgcagttactcaggcctcatgaccaaaaaccccggccacatcgcctgggaaacggaatggctccactcagatctctacacactcagccacatcgaggccgagctcggcgcgaacatgccaccgccgcgctggcgtcagcagaccacgtacaaagcggctccgacgccgctagggcggaattgcgcactgttcgattccgtcaggttgtgggcctatcgtcccgccctcatgcggatctacctgccgacccggaacgtggacggactcggccgcgcgatctatgccgagtgccacgcgcgaaacgccgaattcccgtgcaacgacgtgtgtcccggaccgctaccggacagcgaggtccgcgccatcgccaacagcatttggcgttggatcacaaccaagtcgcgcatttgggcggacgggatcgtggtctacgaggccacactcagtgcgcgccagtcggccatctcgcggaagggcgcagcagcgcgcacggcggcgagcacagttgcgcggcgcgcaaagtccgcgtcagccatggaggcattgctatgagcgacggctacagcgacggctacagcgacggctacaaccggcagccgactgtccgcaaaaagcggcgcgtgaccgccgccgaaggcgctcgaatcaccggactatccgaacgccacgtcgtccggctcgtggcgcaggaacgcagcgagtggctcgccgagcaggctgcacgccgcgaacgcatccgcgcctatcacgacgacgagggccactcttggccgcaaacggccaaacatttcgggctgcatctggacaccgttaagcgactcggctatcgggcgaggaaagagcgtgcggcagaacaggaagcggctcaaaaggcccacaacgaagccgacaatccaccgctgttctaacgcaattggggagcgggtgtcgcgggggttccgtggggggttccgttgcaacgggtcggacaggtaaaagtcctggtagacgctagttttctggtttgggccatgcctgtctcgttgcgtgtttcgttgcgcccgttttgaataccagccagacgagacggggttctacgaatcttggtcgataccaagccatttccgctgaatatcggggagctcaccgccagaatcggtggttgtggtgatgtacgtggcgaactccgttgtagtgcctgtggtggcatccgtggccactctcgttgcacggttcgttgtgccgttacaggccccgttgacagctcaccgaacgtagttaaaacatgctggtcaaactaggtttaccaacgatacgagtcagctcatctagggccagttctaggcgttgttcgttgcgcggttcgttgcgcatgtttcgtgtggttgctagatggctccgcaaccacacgcttcgaggttgagtgcttccagcacgggcgcgatccagaagaacttcgtcgtgcgactgtcctcgttaacgctcgaagcgatgccgatcaaatcggctgtgccgtcgcggttcttgcggtacagcggcgcgcctgagtcgccatgtacggtgcgcagctgagcggtgatcgtgtacttggcagccacaacgaccggcccacaggtctcgccggatttcatcccgtacttgcagacctcggtgccgtacggaacatctttgcggtccttcagcaccgcacgcacggggtatcttccgccgattttgaacgaagcgatcggtgttcccggagcaaacgcaatcaccccagcgtcggtgtagaccggcaatagatcatcgtcgccggtaatcgtggtgccttcgtctctcgacgcaacgtaggtacccaacgtccgctgtgtatccggtttctctgcaaccgaatacagcaccgggcccccgtggtcgcagtgccccgcagcgatgccgtacagcttgtgggtcgacgggtcacctgcgatcacaccgagcgtgcaggtagcgaagtcctcatcaccaccaggacgggcctgggcgataccagcgccgggggcgatcccgccaggaaatgccgtccaatcggtgtccgcgactgcgggcggagcggacactccgaccaacacaacaaccaacgtcgtcatagcgacgacgaaccacgatcggatgatccgaatcactgcgctgtccatacaggcggccacccctcgaactcaccagcttcaatgcgcgtctgcaaagactgccatggagcgctactcgggccggtctcaacgcactgctcgaagaaatcgacagcggccagtgcaccgaactccttgtgctgctcggcttgcagctcggcgctccacgtcttcacctcgggcgcgaacaattcgacgaccttgttagcgatcgacgcattggtcgccgcagcaatgcccgccacatcccagtcccctggatcgaggtcggcgcggcacaacagctccgcgatccgaccccgatccagcgcctgcctcaccacttttcgtcgtcgcggggctcacccgggtactgaaccggatcgccactatcgaaaccggctacgcgcggcggcagcggcggcgctggcggcggcacgttcatcaccaccggaccgggaaccagcgtcgattcatcgatggccggctgaatcggccggcgttcgtcgggcagcaggtccgcgagctcgtcggcatcgatgtactcgccggccggcggatcgtcgtcacgcagaatgtgggacaccagcgccttgtcgcgggcctcttcgccggtgaggatccgctcggaggcgcggtcgcggcgcggctgtggcatgtcggggcgtgccgctcccccggcgccgcccatcggcccgcccattggcattccgcccatgccgcccatcattcctgtggagccagctggcccggtcttcaatggaggcaggcccgctgacggcgacgtggaggcggtgcgccccgaaatctgggccggatcaactcggccaccggtcacggtcggattggcggccggtgttgtcggtgcgacaacaccgccgacaacgccgcccccgccatcgccgaaccacggggtggtgggtgcgtccgacctgccagaatcgtcccggcgtcgcggctgctgctgaacaccgccgagcccgccgccagtcgggaaagcgctgggcatcatggtcgggccgggggccatcggagcgggtgcacctgtcggggctggtggcggcgtcagcggcgtcgcctgcaccatcgggccgtgggccgccgacacctccgtggtcgcaccgccgccgccgacgatcgtgtcgtcagcgccgccgccgacgatggtgtcgtcccaaccgacgcgcggctggaggtcgcggggcgaccggaaaatgcctttatcgtggccggacaccttggaatcggtgtccggctcgtcgggcaggccttccgtcgctgacgtgcacgcgcgctccaatcgctccagcgccgcctggacctcgggatcggcagccgtcccgccccgaatgaccggggccgcggcgcggccggcctctcccaccgcacgcagggcgtcggcgattttcagcaggtcgccgcccatttccgacatcttttcctcggcggcggcgatcgccgcaccggacccaatgtcgtccggagagccccacgaaggaccagaacaagacagagtgcctcctgccgatccaaacatgagccgcctgcccgtcctgctcctgctccaactcctggtccgccccggactccaagctcccatgacccagacaacgcccttgaagacaagctgggttaactgctctaacatgatcgatgaaattataacacacttaaagcagccacctttgcctttgctggtgagtagcttggataagactggcctgcagcagtgaggggtggtggctgcctaaggccaaaaggcctcatgggcctttctctcccttcacccccacaggacttcaacaacctcaatggggaagaccaagacattctgatggtaagagctcagcccgtggatcccgatccacttcctgcctgggtgacttcagccatgtcattccatcttacctagccttgctttcttcatctgtaaaatagggttaatagcacctatctcagtgggattgttatgacaatcaaatggcacaatgtgcatgttctggcccagcatctggcacttaagagttcaatacatggccacagccatggctataataatgaaaatg")
