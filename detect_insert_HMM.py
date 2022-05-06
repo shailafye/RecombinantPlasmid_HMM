@@ -42,8 +42,8 @@ class DetectInsertHMM:
         gc_plasmid = gc_recomb
 
         # at content of insert and plasmid
-        at_insert = 1 - gc_insert
-        at_plasmid = gc_plasmid
+        at_insert = 1-gc_insert
+        at_plasmid = 1-gc_plasmid
 
         # length of insert and plasmid
         temp_length_insert = 0.3 * length_recomb # double check average -> 30%?
@@ -211,10 +211,10 @@ def gc_content(sequence):
 
 # viterbi algorithm
 def viterbi_algorithm(observations, states, start_p, trans_p, emit_p):
-    #print(observations, states, start_p, trans_p, emit_p)
+    print(observations, states, start_p, trans_p, emit_p)
     V = [{}]
     for st in states:
-        V[0][st] = {"log_prob": np.log(start_p[st] * emit_p[st][observations[0]]),"prev": None}  # storing start probability of first position
+        V[0][st] = {"log_prob": np.log(start_p[st] * emit_p[st][observations[0]]), "prev": None}  # storing start probability of first position
     for t in range(1, len(observations)):
         V.append({})
         for st in states:
