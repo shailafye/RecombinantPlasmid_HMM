@@ -70,10 +70,10 @@ class DetectInsertHMM:
             "vector": {"insert": 1 / length_plasmid, "vector": 1 - (1 / length_plasmid)},
         }
         emit_p = {
-            "insert": {"a": at_insert / 2, "t": at_insert / 2, "c": gc_insert / 2,
-                       "g": gc_insert / 2},
-            "vector": {"a": at_plasmid / 2, "t": at_plasmid / 2, "c": gc_plasmid / 2,
-                       "g": gc_plasmid / 2},
+            "insert": {"A": at_insert / 2, "T": at_insert / 2, "C": gc_insert / 2,
+                       "G": gc_insert / 2},
+            "vector": {"A": at_plasmid / 2, "T": at_plasmid / 2, "C": gc_plasmid / 2,
+                       "G": gc_plasmid / 2},
         }
 
         ### HMM BELOW ###
