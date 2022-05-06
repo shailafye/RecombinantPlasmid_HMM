@@ -6,6 +6,10 @@ Assumption is that plasmid is longer than insert and plasmid GC content is great
 """
 
 import re
+from collections import Counter
+import pandas as pd
+import csv
+import numpy as np
 
 
 class InsertDetectHMM:
@@ -26,8 +30,56 @@ class InsertDetectHMM:
 
     def first_HMM(self):
         # Returns detected intervals in [[a,b],[c,d]...] form
-        detected_intervals = []
-        ## HMM BELOW ###
+
+        ### Calculate GC content ###
+
+        # recomb dna length and gc content
+        gc_recomb = gc_content(self.sequence)
+        length_recomb = len(self.sequence)
+
+        # gc content of insert and plasmid
+        gc_insert = 1 - gc_recomb  # under assumption that plasmid gc content is always higher # actinobacteria
+        gc_plasmid = gc_recomb
+
+        # at content of insert and plasmid
+        at_insert = 1 - gc_insert
+        at_plasmid = gc_plasmid
+
+        # length of insert and plasmid
+        temp_length_insert = 0.3 * length_recomb # double check average -> 30%?
+        temp_length_plasmid = length_recomb
+        temp_length_total = temp_length_insert + temp_length_plasmid
+        length_insert = temp_length_insert
+        length_plasmid = temp_length_plasmid
+
+        # length portion of insert in recombinant DNA
+        fraction_insert = temp_length_insert / temp_length_total
+        fraction_plasmid = 1 - fraction_insert
+
+        ### Matricies ###
+
+        observations = self.sequence
+        observations = observations.replace('\r', '')
+        states = ("insert", "vector")
+        start_p = {
+            "insert": fraction_insert,
+            "vector": fraction_plasmid
+        }
+        trans_p = {
+            "insert": {"insert": 1 - (1 / length_insert), "vector": 1 / length_insert},
+            "vector": {"insert": 1 / length_plasmid, "vector": 1 - (1 / length_plasmid)},
+        }
+        emit_p = {
+            "insert": {"a": at_insert / 2, "t": at_insert / 2, "c": gc_insert / 2,
+                       "g": gc_insert / 2},
+            "vector": {"a": at_plasmid / 2, "t": at_plasmid / 2, "c": gc_plasmid / 2,
+                       "g": gc_plasmid / 2},
+        }
+
+
+        ### HMM BELOW ###
+
+
 
         #####
         self.detected_intervals = detected_intervals
@@ -147,3 +199,14 @@ class InsertDetectHMM:
                     valid_interval.append([interval, interval_end])
 
         return invalid_interval, valid_interval
+
+
+# calculate GC content
+def gc_content(sequence):
+    res = Counter(sequence)
+    gc_sum = res["g"] + res["c"] + res["G"] + res["C"]
+    # at_sum = res["a"]+res["t"]+res["A"]+res["T"]
+    total_len = len(sequence)
+    # assert total_len == at_sum+ gc_sum
+    gc_perc = gc_sum / total_len
+    return gc_perc
