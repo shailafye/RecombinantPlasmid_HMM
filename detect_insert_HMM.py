@@ -34,14 +34,17 @@ class DetectInsertHMM:
         # run second HMM on new intervals for length of insert and GC of insert
         self.final_intervals_score = {}
         for i in self.filtered_intervals:
-            print(i, self.filtered_intervals[i])
+            #print(i, self.filtered_intervals[i])
             intervals_output = self.second_HMM(self.filtered_intervals[i])
-            print(intervals_output)
+            #print(intervals_output)
             # check confidence scoring on new intervals and multiply
-            #sc = self.confidence_score_secondHMM(ground=self.filtered_intervals[i], predict=intervals_output)
-            #print(sc)
-
-
+            sc = self.confidence_score_secondHMM(ground=[self.filtered_intervals[i]], predict=intervals_output)
+            #print("new", sc)
+            #print("MULT:New * old:", sc * i)
+            new_score = sc * i
+            self.final_intervals_score[new_score] = self.filtered_intervals[i]
+        print(self.final_intervals_score)
+        return
 
     def first_HMM(self):
         # Returns detected intervals in [[a,b],[c,d]...] form
@@ -147,33 +150,30 @@ class DetectInsertHMM:
         #self.second_detected_intervals = second_detected_intervals
         return second_detected_intervals
 
-    def get_intersection(self, ground, predict):
+    def get_intersection_union(self, ground, predict):
         ground_ranges = []
         for g in ground:
-            ground_ranges.append(list(range(g[0], g[1] + 1)))
+            if g[0] > g[1]:
+                # int1 = [g[0], len] #self.sequence
+                # int2 = [0, g[1]]
+                ground_ranges.extend(list(range(g[0], len(self.sequence))))
+                ground_ranges.extend(list(range(0, g[1])))
+            else:
+                ground_ranges.extend(list(range(g[0], g[1] + 1)))
         predict_ranges = []
         for p in predict:
-            predict_ranges.append(list(range(p[0], p[1] + 1)))
+            predict_ranges.extend(list(range(p[0], p[1] + 1)))
 
-        intersect = sorted(set(ground_ranges).intersection(predict_ranges))
-        return len(intersect)
-
-    def get_union(self, ground, predict):
-        ground_ranges = []
-        for g in ground:
-            ground_ranges.append(list(range(g[0], g[1] + 1)))
-        predict_ranges = []
-        for p in predict:
-            predict_ranges.append(list(range(p[0], p[1] + 1)))
-
-        intersect = sorted(set(ground_ranges).union(predict_ranges))
-        return len(intersect)
+        union = set(ground_ranges).union(predict_ranges)
+        intersect = set(ground_ranges).intersection(predict_ranges)
+        return len(intersect), len(union)
 
     def confidence_score_secondHMM(self, ground, predict):
         # pass in intervals: truth and observed
         # calculate the score (higher > more confident)
         # return score as float
-        score = self.get_intersection(ground, predict) / self.get_union(ground, predict)
+        inter, union = self.get_intersection_union(ground, predict)
+        score = inter / union
         return score
 
     # Function to get top three intervals
@@ -306,7 +306,6 @@ def gc_content(sequence):
     gc_perc = gc_sum / total_len
     return gc_perc
 
-
 # viterbi algorithm
 def viterbi_algorithm(observations, states, start_p, trans_p, emit_p):
     V = [{}]
@@ -367,7 +366,6 @@ def viterbi_algorithm(observations, states, start_p, trans_p, emit_p):
 
 
 
-
 if __name__ == '__main__':
     all_recomb_seqs = []
     with open("recombinant_seqs.txt") as file:
@@ -376,7 +374,7 @@ if __name__ == '__main__':
 
     test_num = 15
     test_seq1 = all_recomb_seqs[test_num]
-    print(len(test_seq1))
+    #print(len(test_seq1))
     obj1 = DetectInsertHMM(test_seq1)
     #print(obj1.detected_intervals)
     #print(obj1.filtered_intervals)
