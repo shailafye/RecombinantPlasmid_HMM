@@ -17,14 +17,17 @@ class DetectInsertHMM:
     def __init__(self, sequence):
         self.sequence = sequence.upper()
         self.inter_dict_score = {}  # all interval scores
-        self.top_dict = {}  # top 2 or 3 intervals
+        self.filtered_intervals = {} # top 2 or 3 intervals for the sequence to run again on HMM2
 
         # run first HMM on this sequence
         self.detected_intervals = self.first_HMM()
 
         # run verification steps
-        if len(self.detected_intervals) > 1:
-            print(self.filter_best_intervals())
+        if len(self.detected_intervals) > 0:
+            self.filtered_intervals = self.filter_best_intervals()
+        else:
+            print("No INSERT detected!")
+            return
 
         # run second HMM on new intervals for length of insert and GC of insert
 
@@ -78,7 +81,7 @@ class DetectInsertHMM:
                        "G": gc_plasmid / 2},
         }
 
-        ### HMM BELOW ###
+        ### RUN HMM BELOW ###
         detected_intervals = viterbi_algorithm(observations, states, start_p, trans_p, emit_p)
 
         #####
@@ -87,6 +90,10 @@ class DetectInsertHMM:
 
     # Function to get top three intervals
     def filter_best_intervals(self):
+        # if there is only one interval, just return it with score == 1
+        if len(self.detected_intervals) == 1:
+            return {1: self.detected_intervals}
+
         # first check to see if each one has at least 1 restriction site detected on either side
         # then return top intervals
         # if invalid = length 0 then all good, if not, remove
@@ -107,6 +114,7 @@ class DetectInsertHMM:
         # insert_intervals = [[0, 569], [1605, 1964], [7216, 7389]]
         # tests combinations of 2 and 3 fragments to get best combo of intervals
         # higher score = better
+        top_dict = {}  # top 2 or 3 intervals
         interval_lengths = []
         prev_index = 0
         for i in insert_intervals:
@@ -148,8 +156,8 @@ class DetectInsertHMM:
         keys.sort(reverse=True)
         top_keys = keys[0:3]
         for k in top_keys:
-            self.top_dict[k] = self.inter_dict_score[k]
-        return self.top_dict
+            top_dict[k] = self.inter_dict_score[k]
+        return top_dict
 
     def find_rest_sites(self, seq, offset=0):
         # offset is the index value your sequence starts at
@@ -269,6 +277,16 @@ def viterbi_algorithm(observations, states, start_p, trans_p, emit_p):
 
     return insert_result_intervals
 
+
 if __name__ == '__main__':
-    obj1 = DetectInsertHMM("acttttaaattagaaaatgaaaaggcagttctaggtgaggaataccaagggccttaaggtcagtgtttggtagggcagactctggactgacagacagaaatttccccctcagatgtgccagcttctttttcccttaaaaaattgagtttgtgttttccaccctcattggctgtggcattatcatttacagttatttttcatggttccagttggttgcagttgttctgtctcacctttgcatgacatttcttgggtcaaacaagaagtggaagcctttgctgagttcctgggccatctgtgtttggggcactcacagctcacatgctgcacccatttccatgctggggtctctgtgattttcttcttgatttctaggagactttaattcagtcagggcatgaacactgttatcagcctctgagctacaaatacttcccttggaaaaccccctgtcttttgtagagcttctttttggagatattttttcccccaagtgcagaaagatccacctaggtaccccctccccacccatttttttttttttttttgagacaagagtctcactctgttgcccaggctggagtgcagtggcacgatctcagctcactgctacctctgcctcctgagttcaagcaattctcctgtctcagcctcccaagtagctaggattacaggcatgcaccaccactcccatttttgtatttttagtagagacggggtttcaccatattggtcaggctggtcttgaactcgacctcaggttatctgcctgcctcggcctcccaaagtgctgggattacaggcttgagccactgcgcccagcccacctaggccctttatgtagctcaaatggagccagagactgggggcttgaggaaaccaggtcctgcctgccactcacttctaggcctgtgcccttgggcagggacccacctgaggcaagaacgggactaggagggaacccgaggatgtccccaacagtgggcttgggaaactgtgggggtgacttccacctgcttgtgggagggatactctgtaacctttcccccttaagtgtattctctgccccgttaggaaaataaccttcgaaggccaaacctggaggcattcaacagggctgtcaagagtttacagaacgcatcagcaattgagagcattcttaaagtatgtgaagctgttgagggtttgggatccctgtgttggccctgccctgcctctggggaggagagcagggcccactccctttccaagggaatctctgaccatctgctttggtctctttccacagaatctcctgccatgtctgcccctggccacggccgcacccacggtaagctgtcccccaagatgcccgtcatggcttgctcctcagctggtcatcaccattacagcctggactcacctaatgccaccttcttggtttctttatagcgacatccaatccatatcaaggacggtgactggaatgaattccggaggaaactgacgttctatctgaaaacccttgagaatgcgcaggctcaacagacgactttgagcctcgcgatcttttgagtccaacgtccagctcgttctctgggccttctcaccacagagcctcgggacatcaaaaacagcagaacttctgaaacctctgggtcatctctcacacattccaggaccagaagcatttcaccttttcctgcggcatcagatgaattgttaattatctaatttctgaaatgtgcagctcccatttggccttgtgcggttgtgttctcatttttatcccattgagactatttatttatgtatgtatgtatttatttatttattgcctggagtgtgaactgtatttattttagcagaggagccatgtcctgctgcttctgcaaaaaactcagagtggggtggggagcatgttcatttgtacctcgagttttaaactggttcctagggatgtgtgagaataaactagactctgaacaccggaaacggctcggccgcgatcgactccagcaacgcggccatgtcgatgcgctcctgaaactcggcctcgttggtcagcgaatcgccgtcataacggatggcgcccgggccgccgcgcgatatcgagccgagaacgttatcgaagttggtcatgtgtaatcccctcgtttgaactttggattaagcgtagatacacccttggacaagccagttggattcggagacaagcaaattcagccttaaaaagggcgaggcctgcggtggtggaacaccgcagggcctctaaccgctcgacgcgctgcaccaaccagcccgcgaacggctggcagccagcgtaaggcgcggctcatcgggcggcgttcgccacgatgtcctgcacttcgagccaagcctcgaacacctgctggtgtgcacgactcacccggttgttgacaccgcgcgcggccgtgcgggctcggtggggcggctgtgtcgcccttgccagcgtgagtagcgcgtacctcacctcgcccaacaggtcgcacacagccgattcgtacgccataaagccaggtgagcccaccagctccgtaagttcgggcgctgtgtggctcgtacccgcgcattcaggcggcagggggtctaacgggtctaaggcggcgtgtacggccgccacagcggctctcagcggcccggaaacgtcctcgaaacgacgcatgtgttcctcctggttggtacaggtggttgggggtgctcggctgtcgctggtgttccaccaccagggctcgacgggagagcgggggagtgtgcagttgtggggtggcccctcagcgaaatatctgacttggagctcgtgtcggaccatacaccggtgattaatcgtggtctactaccaagcgtgagccacgtcgccgacgaatttgagcagctctggctgccgtactggccgctggcaagcgacgatctgctcgaggggatctaccgccaaagccgcgcgtcggccctaggccgccggtacatcgaggcgaacccaacagcgctggcaaacctgctggtcgtggacgtagaccatccagacgcagcgctccgagcgctcagcgcccgggggtcccatccgctgcccaacgcgatcgtgggcaatcgcgccaacggccacgcacacgcagtgtgggcactcaacgcccctgttccacgcaccgaatacgcgcggcgtaagccgctcgcatacatggcggcgtgcgccgaaggccttcggcgcgccgtcgacggcgaccgcagttactcaggcctcatgaccaaaaaccccggccacatcgcctgggaaacggaatggctccactcagatctctacacactcagccacatcgaggccgagctcggcgcgaacatgccaccgccgcgctggcgtcagcagaccacgtacaaagcggctccgacgccgctagggcggaattgcgcactgttcgattccgtcaggttgtgggcctatcgtcccgccctcatgcggatctacctgccgacccggaacgtggacggactcggccgcgcgatctatgccgagtgccacgcgcgaaacgccgaattcccgtgcaacgacgtgtgtcccggaccgctaccggacagcgaggtccgcgccatcgccaacagcatttggcgttggatcacaaccaagtcgcgcatttgggcggacgggatcgtggtctacgaggccacactcagtgcgcgccagtcggccatctcgcggaagggcgcagcagcgcgcacggcggcgagcacagttgcgcggcgcgcaaagtccgcgtcagccatggaggcattgctatgagcgacggctacagcgacggctacagcgacggctacaaccggcagccgactgtccgcaaaaagcggcgcgtgaccgccgccgaaggcgctcgaatcaccggactatccgaacgccacgtcgtccggctcgtggcgcaggaacgcagcgagtggctcgccgagcaggctgcacgccgcgaacgcatccgcgcctatcacgacgacgagggccactcttggccgcaaacggccaaacatttcgggctgcatctggacaccgttaagcgactcggctatcgggcgaggaaagagcgtgcggcagaacaggaagcggctcaaaaggcccacaacgaagccgacaatccaccgctgttctaacgcaattggggagcgggtgtcgcgggggttccgtggggggttccgttgcaacgggtcggacaggtaaaagtcctggtagacgctagttttctggtttgggccatgcctgtctcgttgcgtgtttcgttgcgcccgttttgaataccagccagacgagacggggttctacgaatcttggtcgataccaagccatttccgctgaatatcggggagctcaccgccagaatcggtggttgtggtgatgtacgtggcgaactccgttgtagtgcctgtggtggcatccgtggccactctcgttgcacggttcgttgtgccgttacaggccccgttgacagctcaccgaacgtagttaaaacatgctggtcaaactaggtttaccaacgatacgagtcagctcatctagggccagttctaggcgttgttcgttgcgcggttcgttgcgcatgtttcgtgtggttgctagatggctccgcaaccacacgcttcgaggttgagtgcttccagcacgggcgcgatccagaagaacttcgtcgtgcgactgtcctcgttaacgctcgaagcgatgccgatcaaatcggctgtgccgtcgcggttcttgcggtacagcggcgcgcctgagtcgccatgtacggtgcgcagctgagcggtgatcgtgtacttggcagccacaacgaccggcccacaggtctcgccggatttcatcccgtacttgcagacctcggtgccgtacggaacatctttgcggtccttcagcaccgcacgcacggggtatcttccgccgattttgaacgaagcgatcggtgttcccggagcaaacgcaatcaccccagcgtcggtgtagaccggcaatagatcatcgtcgccggtaatcgtggtgccttcgtctctcgacgcaacgtaggtacccaacgtccgctgtgtatccggtttctctgcaaccgaatacagcaccgggcccccgtggtcgcagtgccccgcagcgatgccgtacagcttgtgggtcgacgggtcacctgcgatcacaccgagcgtgcaggtagcgaagtcctcatcaccaccaggacgggcctgggcgataccagcgccgggggcgatcccgccaggaaatgccgtccaatcggtgtccgcgactgcgggcggagcggacactccgaccaacacaacaaccaacgtcgtcatagcgacgacgaaccacgatcggatgatccgaatcactgcgctgtccatacaggcggccacccctcgaactcaccagcttcaatgcgcgtctgcaaagactgccatggagcgctactcgggccggtctcaacgcactgctcgaagaaatcgacagcggccagtgcaccgaactccttgtgctgctcggcttgcagctcggcgctccacgtcttcacctcgggcgcgaacaattcgacgaccttgttagcgatcgacgcattggtcgccgcagcaatgcccgccacatcccagtcccctggatcgaggtcggcgcggcacaacagctccgcgatccgaccccgatccagcgcctgcctcaccacttttcgtcgtcgcggggctcacccgggtactgaaccggatcgccactatcgaaaccggctacgcgcggcggcagcggcggcgctggcggcggcacgttcatcaccaccggaccgggaaccagcgtcgattcatcgatggccggctgaatcggccggcgttcgtcgggcagcaggtccgcgagctcgtcggcatcgatgtactcgccggccggcggatcgtcgtcacgcagaatgtgggacaccagcgccttgtcgcgggcctcttcgccggtgaggatccgctcggaggcgcggtcgcggcgcggctgtggcatgtcggggcgtgccgctcccccggcgccgcccatcggcccgcccattggcattccgcccatgccgcccatcattcctgtggagccagctggcccggtcttcaatggaggcaggcccgctgacggcgacgtggaggcggtgcgccccgaaatctgggccggatcaactcggccaccggtcacggtcggattggcggccggtgttgtcggtgcgacaacaccgccgacaacgccgcccccgccatcgccgaaccacggggtggtgggtgcgtccgacctgccagaatcgtcccggcgtcgcggctgctgctgaacaccgccgagcccgccgccagtcgggaaagcgctgggcatcatggtcgggccgggggccatcggagcgggtgcacctgtcggggctggtggcggcgtcagcggcgtcgcctgcaccatcgggccgtgggccgccgacacctccgtggtcgcaccgccgccgccgacgatcgtgtcgtcagcgccgccgccgacgatggtgtcgtcccaaccgacgcgcggctggaggtcgcggggcgaccggaaaatgcctttatcgtggccggacaccttggaatcggtgtccggctcgtcgggcaggccttccgtcgctgacgtgcacgcgcgctccaatcgctccagcgccgcctggacctcgggatcggcagccgtcccgccccgaatgaccggggccgcggcgcggccggcctctcccaccgcacgcagggcgtcggcgattttcagcaggtcgccgcccatttccgacatcttttcctcggcggcggcgatcgccgcaccggacccaatgtcgtccggagagccccacgaaggaccagaacaagacagagtgcctcctgccgatccaaacatgagccgcctgcccgtcctgctcctgctccaactcctggtccgccccggactccaagctcccatgacccagacaacgcccttgaagacaagctgggttaactgctctaacatgatcgatgaaattataacacacttaaagcagccacctttgcctttgctggtgagtagcttggataagactggcctgcagcagtgaggggtggtggctgcctaaggccaaaaggcctcatgggcctttctctcccttcacccccacaggacttcaacaacctcaatggggaagaccaagacattctgatggtaagagctcagcccgtggatcccgatccacttcctgcctgggtgacttcagccatgtcattccatcttacctagccttgctttcttcatctgtaaaatagggttaatagcacctatctcagtgggattgttatgacaatcaaatggcacaatgtgcatgttctggcccagcatctggcacttaagagttcaatacatggccacagccatggctataataatgaaaatg")
+    all_recomb_seqs = []
+    with open("recombinant_seqs.txt") as file:
+        for line in file:
+            all_recomb_seqs.append(line.rstrip())
+    test_num = 13
+    test_seq1 = all_recomb_seqs[test_num]
+    print(len(test_seq1))
+    obj1 = DetectInsertHMM(test_seq1)
     print(obj1.detected_intervals)
+    print(obj1.filtered_intervals)
+
