@@ -23,6 +23,8 @@ class DetectInsertHMM:
         self.detected_intervals = self.first_HMM()
 
         # run verification steps
+        if len(self.detected_intervals) > 1:
+            print(self.filter_best_intervals())
 
         # run second HMM on new intervals for length of insert and GC of insert
 
@@ -149,7 +151,7 @@ class DetectInsertHMM:
             self.top_dict[k] = self.inter_dict_score[k]
         return self.top_dict
 
-    def find_rest_sites(self, offset=0):
+    def find_rest_sites(self, seq, offset=0):
         # offset is the index value your sequence starts at
         rest_dict = {
             "sbfi": "TGCA", "bglii": "GATC", "eari": "TGG", "bpuei": "CC", "bspdi": "CG", "maubi": "CGCG",
@@ -159,7 +161,7 @@ class DetectInsertHMM:
 
         sites_found = {}
         for site in rest_dict:
-            res = [m.start() for m in re.finditer(rest_dict[site], self.sequence)]
+            res = [m.start() for m in re.finditer(rest_dict[site], seq)]
             res = [r + offset for r in res]
             if len(res) > 0:
                 sites_found[site] = res
