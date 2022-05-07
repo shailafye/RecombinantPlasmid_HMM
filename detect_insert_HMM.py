@@ -18,6 +18,8 @@ class DetectInsertHMM:
         self.sequence = sequence.upper()
         self.inter_dict_score = {}  # all interval scores
         self.filtered_intervals = {} # top 2 or 3 intervals for the sequence to run again on HMM2
+        self.detected_intervals = [] # first detected intervals HMM
+        #self.second_detected_intervals = [] # second detected intervals HMM
 
         # run first HMM on this sequence
         self.detected_intervals = self.first_HMM()
@@ -30,8 +32,16 @@ class DetectInsertHMM:
             return
 
         # run second HMM on new intervals for length of insert and GC of insert
+        self.final_intervals_score = {}
+        for i in self.filtered_intervals:
+            print(i, self.filtered_intervals[i])
+            intervals_output = self.second_HMM(self.filtered_intervals[i])
+            print(intervals_output)
+            # check confidence scoring on new intervals and multiply
+            #sc = self.confidence_score_secondHMM(ground=self.filtered_intervals[i], predict=intervals_output)
+            #print(sc)
 
-        # check confidence scoring
+
 
     def first_HMM(self):
         # Returns detected intervals in [[a,b],[c,d]...] form
@@ -87,6 +97,84 @@ class DetectInsertHMM:
         #####
         self.detected_intervals = detected_intervals
         return detected_intervals
+
+    def second_HMM(self, candidate):
+        # feedback interval sequence --> what first HMM predicts and scored
+        test_insert_interval = ""
+
+        if candidate[0] <= candidate[1]:
+            test_insert_interval += self.sequence[candidate[0]:candidate[1]]
+        else:
+            test_insert_interval += self.sequence[candidate[0]:]
+            test_insert_interval += self.sequence[:candidate[1]]
+
+        # length of insert and plasmid
+        length_plasmid = len(self.sequence) - len(test_insert_interval)
+        length_insert = len(test_insert_interval)
+
+        # gc content of insert and plasmid
+        gc_insert = gc_content(test_insert_interval)
+        gc_plasmid = (gc_content(self.sequence) * len(self.sequence) - gc_insert * length_insert) / length_plasmid
+
+        # at content of insert and plasmid
+        at_insert = 1 - gc_insert
+        at_plasmid = 1 - gc_plasmid
+
+        # length portion of insert in recombinant DNA
+        fraction_insert = length_insert / (length_insert + length_plasmid)
+        fraction_plasmid = 1 - fraction_insert
+
+        observations = self.sequence
+        observations = observations.replace('\r', '')
+        states = ("insert", "vector")
+        start_p_fb = {
+            "insert": fraction_insert,
+            "vector": fraction_plasmid
+        }
+        trans_p_fb = {
+            "insert": {"insert": 1 - (1 / length_insert), "vector": 1 / length_insert},
+            "vector": {"insert": 1 / length_plasmid, "vector": 1 - (1 / length_plasmid)},
+        }
+        emit_p_fb = {
+            "insert": {"A": at_insert / 2, "T": at_insert / 2, "C": gc_insert / 2, "G": gc_insert / 2},
+            "vector": {"A": at_plasmid / 2, "T": at_plasmid / 2, "C": gc_plasmid / 2, "G": gc_plasmid / 2},
+        }
+
+        ### RUN SECOND HMM BELOW ###
+        second_detected_intervals = viterbi_algorithm(observations, states, start_p_fb, trans_p_fb, emit_p_fb)
+
+        #####
+        #self.second_detected_intervals = second_detected_intervals
+        return second_detected_intervals
+
+    def get_intersection(self, ground, predict):
+        ground_ranges = []
+        for g in ground:
+            ground_ranges.append(list(range(g[0], g[1] + 1)))
+        predict_ranges = []
+        for p in predict:
+            predict_ranges.append(list(range(p[0], p[1] + 1)))
+
+        intersect = sorted(set(ground_ranges).intersection(predict_ranges))
+        return len(intersect)
+
+    def get_union(self, ground, predict):
+        ground_ranges = []
+        for g in ground:
+            ground_ranges.append(list(range(g[0], g[1] + 1)))
+        predict_ranges = []
+        for p in predict:
+            predict_ranges.append(list(range(p[0], p[1] + 1)))
+
+        intersect = sorted(set(ground_ranges).union(predict_ranges))
+        return len(intersect)
+
+    def confidence_score_secondHMM(self, ground, predict):
+        # pass in intervals: truth and observed
+        # calculate the score (higher > more confident)
+        # return score as float
+        score = self.get_intersection(ground, predict) / self.get_union(ground, predict)
+        return score
 
     # Function to get top three intervals
     def filter_best_intervals(self):
@@ -278,15 +366,19 @@ def viterbi_algorithm(observations, states, start_p, trans_p, emit_p):
     return insert_result_intervals
 
 
+
+
 if __name__ == '__main__':
     all_recomb_seqs = []
     with open("recombinant_seqs.txt") as file:
         for line in file:
             all_recomb_seqs.append(line.rstrip())
-    test_num = 13
+
+    test_num = 15
     test_seq1 = all_recomb_seqs[test_num]
     print(len(test_seq1))
     obj1 = DetectInsertHMM(test_seq1)
-    print(obj1.detected_intervals)
-    print(obj1.filtered_intervals)
+    #print(obj1.detected_intervals)
+    #print(obj1.filtered_intervals)
+
 
