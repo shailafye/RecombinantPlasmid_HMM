@@ -7,19 +7,16 @@ Assumption is that plasmid is longer than insert and plasmid GC content is great
 
 import re
 from collections import Counter
-import pandas as pd
-import csv
 import numpy as np
 
 
 class DetectInsertHMM:
 
-    def __init__(self, sequence):
+    def __init__(self, sequence, name = ""):
         self.sequence = sequence.upper()
         self.inter_dict_score = {}  # all interval scores
         self.filtered_intervals = {} # top 2 or 3 intervals for the sequence to run again on HMM2
         self.detected_intervals = [] # first detected intervals HMM
-        #self.second_detected_intervals = [] # second detected intervals HMM
 
         # run first HMM on this sequence
         self.detected_intervals = self.first_HMM()
@@ -34,16 +31,15 @@ class DetectInsertHMM:
         # run second HMM on new intervals for length of insert and GC of insert
         self.final_intervals_score = {}
         for i in self.filtered_intervals:
-            #print(i, self.filtered_intervals[i])
             intervals_output = self.second_HMM(self.filtered_intervals[i])
-            #print(intervals_output)
             # check confidence scoring on new intervals and multiply
             sc = self.confidence_score_secondHMM(ground=[self.filtered_intervals[i]], predict=intervals_output)
-            #print("new", sc)
-            #print("MULT:New * old:", sc * i)
             new_score = sc * i
+            #new_score = (sc + (i*1.75))/2
             self.final_intervals_score[new_score] = self.filtered_intervals[i]
-        print(self.final_intervals_score)
+        # Output result table
+        # print(self.final_intervals_score)
+
         return
 
     def first_HMM(self):
@@ -98,13 +94,12 @@ class DetectInsertHMM:
         detected_intervals = viterbi_algorithm(observations, states, start_p, trans_p, emit_p)
 
         #####
-        self.detected_intervals = detected_intervals
+        #self.detected_intervals = detected_intervals
         return detected_intervals
 
     def second_HMM(self, candidate):
         # feedback interval sequence --> what first HMM predicts and scored
         test_insert_interval = ""
-
         if candidate[0] <= candidate[1]:
             test_insert_interval += self.sequence[candidate[0]:candidate[1]]
         else:
@@ -147,10 +142,10 @@ class DetectInsertHMM:
         second_detected_intervals = viterbi_algorithm(observations, states, start_p_fb, trans_p_fb, emit_p_fb)
 
         #####
-        #self.second_detected_intervals = second_detected_intervals
         return second_detected_intervals
 
     def get_intersection_union(self, ground, predict):
+        # helper function to get confidence scores
         ground_ranges = []
         for g in ground:
             if g[0] > g[1]:
@@ -180,7 +175,7 @@ class DetectInsertHMM:
     def filter_best_intervals(self):
         # if there is only one interval, just return it with score == 1
         if len(self.detected_intervals) == 1:
-            return {1: self.detected_intervals}
+            return {1: self.detected_intervals[0]}
 
         # first check to see if each one has at least 1 restriction site detected on either side
         # then return top intervals
@@ -199,7 +194,6 @@ class DetectInsertHMM:
 
     # three helper functions below to get best intervals and restriction sites
     def best_intervals(self, insert_intervals):
-        # insert_intervals = [[0, 569], [1605, 1964], [7216, 7389]]
         # tests combinations of 2 and 3 fragments to get best combo of intervals
         # higher score = better
         top_dict = {}  # top 2 or 3 intervals
@@ -235,10 +229,6 @@ class DetectInsertHMM:
                         interval_lengths[e])
                 self.inter_dict_score[1 - res] = [naming_intervals[a],
                                                   naming_intervals[(a + 5) % len(interval_lengths)]]
-        # need to add if there are more than 3 intervals
-        if len(insert_intervals) > 3:
-            print("MORE THAN 3 Intervals")
-            # CHECK!
         # top intervals
         keys = list(self.inter_dict_score.keys())
         keys.sort(reverse=True)
@@ -246,22 +236,6 @@ class DetectInsertHMM:
         for k in top_keys:
             top_dict[k] = self.inter_dict_score[k]
         return top_dict
-
-    def find_rest_sites(self, seq, offset=0):
-        # offset is the index value your sequence starts at
-        rest_dict = {
-            "sbfi": "TGCA", "bglii": "GATC", "eari": "TGG", "bpuei": "CC", "bspdi": "CG", "maubi": "CGCG",
-            "bsrgi": "GTAC", "nsii": "TGCA",
-            "pcii": "CATG", "bspei": "CCGG", "tati": "GTAC", "bsssi": "TCGT", "pfoi": "CCCGG", "pspomi": "GGCC"
-        }
-
-        sites_found = {}
-        for site in rest_dict:
-            res = [m.start() for m in re.finditer(rest_dict[site], seq)]
-            res = [r + offset for r in res]
-            if len(res) > 0:
-                sites_found[site] = res
-        return sites_found
 
     def check_restriction_site_valid(self):
         # if two intervals share no restriction sites --> return to look like: [0, 569], [1605, 1964]
@@ -278,14 +252,14 @@ class DetectInsertHMM:
                 int_1 = [len(self.sequence) - abs(int_1[0]), len(self.sequence) + abs(int_1[1])]
 
             # find all possible restriction sites for the first interval
-            sites_1 = self.find_rest_sites(test_seq_double[int_1[0]:int_1[1]], int_1[0])
+            sites_1 = find_rest_sites(test_seq_double[int_1[0]:int_1[1]], int_1[0])
 
             for j in range(len(self.detected_intervals)):
                 interval_end = self.detected_intervals[j]
                 int_2 = [interval_end[1] - 20, interval_end[1] + 50]
                 # print("int2",int_2)
                 # print(interval, interval_end)
-                sites_2 = self.find_rest_sites(test_seq_double[int_2[0]:int_2[1]], int_2[0])
+                sites_2 = find_rest_sites(test_seq_double[int_2[0]:int_2[1]], int_2[0])
                 common_sites = list(set(sites_1.keys()) & set(sites_2.keys()))
                 if len(common_sites) < 1:
                     # print("NO RESTRICTION SITE COMMON")
@@ -305,6 +279,25 @@ def gc_content(sequence):
     # assert total_len == at_sum+ gc_sum
     gc_perc = gc_sum / total_len
     return gc_perc
+
+
+# can add in user defined restriction site/sticky ends
+def find_rest_sites(seq, offset=0):
+    # offset is the index value your sequence starts at
+    rest_dict = {
+        "sbfi": "TGCA", "bglii": "GATC", "eari": "TGG", "bpuei": "CC", "bspdi": "CG", "maubi": "CGCG",
+        "bsrgi": "GTAC", "nsii": "TGCA",
+        "pcii": "CATG", "bspei": "CCGG", "tati": "GTAC", "bsssi": "TCGT", "pfoi": "CCCGG", "pspomi": "GGCC"
+    }
+
+    sites_found = {}
+    for site in rest_dict:
+        res = [m.start() for m in re.finditer(rest_dict[site], seq)]
+        res = [r + offset for r in res]
+        if len(res) > 0:
+            sites_found[site] = res
+    return sites_found
+
 
 # viterbi algorithm
 def viterbi_algorithm(observations, states, start_p, trans_p, emit_p):
@@ -372,11 +365,43 @@ if __name__ == '__main__':
         for line in file:
             all_recomb_seqs.append(line.rstrip())
 
-    test_num = 15
-    test_seq1 = all_recomb_seqs[test_num]
-    #print(len(test_seq1))
-    obj1 = DetectInsertHMM(test_seq1)
-    #print(obj1.detected_intervals)
-    #print(obj1.filtered_intervals)
+    # test_seq1 = all_recomb_seqs[10]
+    # obj1 = DetectInsertHMM(test_seq1)
+    # print(obj1.detected_intervals)
+    # print(obj1.final_intervals_score)
 
+    for i in range(len(all_recomb_seqs)):
+        print("-------")
+        print(i)
+        test_seq1 = all_recomb_seqs[i]
+        obj1 = DetectInsertHMM(test_seq1)
+        print(obj1.final_intervals_score)
+
+    # code to help write to a CSV
+    writeCSV = False
+    if writeCSV:
+        f = open('csvfile.csv', 'w')
+        for i in range(len(all_recomb_seqs)):
+            print("-------")
+            print(i)
+            test_seq1 = all_recomb_seqs[i]
+            obj1 = DetectInsertHMM(test_seq1)
+            #writer.writerows(obj1.final_intervals_score)
+            results = ""
+            dict_sort = obj1.final_intervals_score.items()
+            dict_sorted = sorted(dict_sort, reverse=True)
+            if len(dict_sort) > 1:
+                for i in range(2):
+                    print(dict_sorted[i])
+                    results += str(dict_sorted[i][1])
+                    results += ": "
+                    results += str(dict_sorted[i][0])
+                    results += "&"
+            else:
+                results += str(dict_sorted[0][1])
+                results += ": "
+                results += str(dict_sorted[0][0])
+            print(results)
+            f.write(results)
+            f.write("\n")
 
