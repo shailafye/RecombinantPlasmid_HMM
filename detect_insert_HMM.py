@@ -37,8 +37,9 @@ class InsertDetector:
             new_score = sc * i
             # new_score = (sc + (i*1.75))/2 --> another way to weight
             self.final_intervals_score[new_score] = self.filtered_intervals[i]
+
         # Output result table
-        # print(self.final_intervals_score)
+        print(self.final_intervals_score)
 
         return
 
@@ -369,10 +370,10 @@ if __name__ == '__main__':
         print(i)
         test_seq1 = all_recomb_seqs[i]
         obj1 = InsertDetector(test_seq1)
-        print(obj1.final_intervals_score)
+        #print(obj1.final_intervals_score)
 
     # code to help write to a CSV
-    writeCSV = True
+    writeCSV = False
     if writeCSV:
         f = open('output_intervals.csv', 'w')
         for i in range(len(all_recomb_seqs)):
