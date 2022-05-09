@@ -10,7 +10,7 @@ from collections import Counter
 import numpy as np
 
 
-class DetectInsertHMM:
+class InsertDetector:
 
     def __init__(self, sequence, name = ""):
         self.sequence = sequence.upper()
@@ -35,7 +35,7 @@ class DetectInsertHMM:
             # check confidence scoring on new intervals and multiply
             sc = self.confidence_score_secondHMM(ground=[self.filtered_intervals[i]], predict=intervals_output)
             new_score = sc * i
-            #new_score = (sc + (i*1.75))/2
+            # new_score = (sc + (i*1.75))/2 --> another way to weight
             self.final_intervals_score[new_score] = self.filtered_intervals[i]
         # Output result table
         # print(self.final_intervals_score)
@@ -358,34 +358,28 @@ def viterbi_algorithm(observations, states, start_p, trans_p, emit_p):
     return insert_result_intervals
 
 
-
 if __name__ == '__main__':
     all_recomb_seqs = []
     with open("recombinant_seqs.txt") as file:
         for line in file:
             all_recomb_seqs.append(line.rstrip())
 
-    # test_seq1 = all_recomb_seqs[10]
-    # obj1 = DetectInsertHMM(test_seq1)
-    # print(obj1.detected_intervals)
-    # print(obj1.final_intervals_score)
-
     for i in range(len(all_recomb_seqs)):
         print("-------")
         print(i)
         test_seq1 = all_recomb_seqs[i]
-        obj1 = DetectInsertHMM(test_seq1)
+        obj1 = InsertDetector(test_seq1)
         print(obj1.final_intervals_score)
 
     # code to help write to a CSV
-    writeCSV = False
+    writeCSV = True
     if writeCSV:
-        f = open('csvfile.csv', 'w')
+        f = open('output_intervals.csv', 'w')
         for i in range(len(all_recomb_seqs)):
             print("-------")
             print(i)
             test_seq1 = all_recomb_seqs[i]
-            obj1 = DetectInsertHMM(test_seq1)
+            obj1 = InsertDetector(test_seq1)
             #writer.writerows(obj1.final_intervals_score)
             results = ""
             dict_sort = obj1.final_intervals_score.items()
