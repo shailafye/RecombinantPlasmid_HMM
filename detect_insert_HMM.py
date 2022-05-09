@@ -360,11 +360,14 @@ def viterbi_algorithm(observations, states, start_p, trans_p, emit_p):
 
 
 if __name__ == '__main__':
+
+    # open sequences from recombinant_seqs text file
     all_recomb_seqs = []
     with open("recombinant_seqs.txt") as file:
         for line in file:
             all_recomb_seqs.append(line.rstrip())
 
+    # run all sequences and output onto terminal
     for i in range(len(all_recomb_seqs)):
         print("-------")
         print(i)
@@ -372,7 +375,7 @@ if __name__ == '__main__':
         obj1 = InsertDetector(test_seq1)
         #print(obj1.final_intervals_score)
 
-    # code to help write to a CSV
+    # Run code to write to CSV file
     writeCSV = False
     if writeCSV:
         f = open('output_intervals.csv', 'w')
@@ -381,7 +384,6 @@ if __name__ == '__main__':
             print(i)
             test_seq1 = all_recomb_seqs[i]
             obj1 = InsertDetector(test_seq1)
-            #writer.writerows(obj1.final_intervals_score)
             results = ""
             dict_sort = obj1.final_intervals_score.items()
             dict_sorted = sorted(dict_sort, reverse=True)

@@ -3,7 +3,8 @@ By: Shaila Fye, Stella Park, Roshni Merugu
 
 05/09/2022
 
-Final group project for Computational Genomics. HMM to detect foreign insert/gene in recombinant plasmid based on GC content and restriction site verification.
+Final group project for Computational Genomics. 
+HMM to detect foreign insert/gene in recombinant plasmid based on GC content and restriction site verification.
 
 -----------
 
